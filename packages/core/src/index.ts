@@ -2,7 +2,7 @@ import type { Message } from "ai/types/provider";
 import { runLoop } from "./agent/loop";
 import { getProvider } from "ai/providers";
 import { parseArgs } from "node:util";
-import { editTool, readTool, writeTool } from "tools";
+import { bashTool, editTool, readTool, writeTool } from "tools";
 
 const { values } = parseArgs({
   options: {
@@ -15,7 +15,7 @@ const { values } = parseArgs({
 const provider = getProvider(values.provider);
 const model = values.model ?? provider.defaultModel;
 const messages: Message[] = [{ role: "user", content: values.prompt! }]
-const TOOLS = [readTool, writeTool, editTool]
+const TOOLS = [readTool, writeTool, editTool, bashTool]
 
 await runLoop({
   provider, messages, tools: TOOLS, model, onEvent(event) {

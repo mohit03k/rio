@@ -1,8 +1,6 @@
 import type { Tool } from "ai/types/tool";
 import { spawn } from "node:child_process";
-import { resolve } from "node:dns";
 import { existsSync } from "node:fs"
-import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
 export const DEFAULT_MAX_LINES = 2000;
@@ -44,7 +42,7 @@ function findBash() {
   );
 }
 // keep the END of the output (errors and results are usually at the bottom).
-
+// keep the last 2k lines then keep the las 51800 bytes of those 2k lines (as lines may have emoji and character which takes more bytes)
 function truncateOutput(output: string): string {
   if (!output) return output;
 
@@ -54,7 +52,11 @@ function truncateOutput(output: string): string {
 
   const bytes = Buffer.from(out, "utf8");
 
-  if (bytes.length > DEFAULT_MAX_BYTES) {
+  if (bytes.length > DEFAULT_MAX_BYTES) { // if more than max bytest. remove those bytes
+    // start is byte position where retained output should begin
+    // start = 60,000 - 51,200 = 8,800
+    // [ first 8,800 bytes ][ last 51,200 bytes ]
+    //        discard              keep
     let start = bytes.length - DEFAULT_MAX_BYTES;
 
     // Skip UTF-8 continuation bytes to avoid splitting a character.

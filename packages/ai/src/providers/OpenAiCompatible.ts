@@ -48,7 +48,7 @@ export function createOpenAiCompatible(name: string, apiKey: string, baseUrl: st
         model: model,
         messages: system ? [{ "role": "system", content: system }, ...chat] : chat, // if system prompt exist thne append before any message.
         stream: true,
-        tools: tools ? tools.map((t) => ({
+        tools: tools.length ? tools.map((t) => ({
           type: "function" as const,
           function: { name: t.name, description: t.description, parameters: t.parameters }
         })) : undefined,
@@ -97,11 +97,21 @@ export function createOpenAiCompatible(name: string, apiKey: string, baseUrl: st
       const content: ContentBlock[] = text ? [{ type: "text", text }] : []
       // if there was any tool call then the final yeild content is ToolCall block
       for (const call of calls) {
-        if (call) {
-          console.log("a call", call);
-          // finally json .parse to convert json string to js object. or if empty then empty object
-          content.push({ type: "tool_call", id: call.id, name: call.name, arguments: call.args ? JSON.parse(call.args) : {} })
+        if (!call) continue;
+
+        let args = {};
+
+        // if last chunk was stop due to length due to max completion_tokens 
+        // and some arg is {"city": "Newyo. which might fail on parsing. so we add try catch
+        try {
+          args = call.args ? JSON.parse(call.args) : {};
+        } catch {
+          console.warn(`skipping tool call ${call.name} because stopped on half args due to length reason of max tokens`, call.args)
+          continue;
         }
+        console.log("a call", call);
+        // finally json .parse to convert json string to js object. or if empty then empty object
+        content.push({ type: "tool_call", id: call.id, name: call.name, arguments: args })
       }
 
       yield {
