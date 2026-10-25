@@ -1,2 +1,2 @@
-A simple cli ai agent
+A simple ai agent and harness
 

@@ -1,4 +1,4 @@
-import type { Tool } from "ai/types/tool";
+import type { Tool, ToolResult } from "ai/types/tool";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs"
 import { delimiter, join } from "node:path";
@@ -76,38 +76,82 @@ function truncateOutput(output: string): string {
   return `[truncated: showing the last ${kept.length} of ${lines.length} lines${note}]\n${out}`;
 }
 
-function runBash(command: string, timeout: number): Promise<string> { // returns string
+function runBash(command: string, timeout: number): Promise<ToolResult> { // returns string
   return new Promise((resolve) => {
-    const child = spawn(findBash(), ["-c", command], { cwd: process.cwd(), windowsHide: true });
+    const child = spawn(findBash(), ["-c", command], {
+      cwd: process.cwd(),
+      windowsHide: true,
+      // if true if your main parent (core) process crashes the child is in group so it can keep running. its not true for windows
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
     let output = "";
-    child.stdout.on("data", (data) => output += data.toString());
-    // if the command ran gave some data. but error
-    child.stderr.on("data", (data) => output += data.toString());
+    let settled = false;
 
-    const timer = setTimeout(() => {
-      // command took too long
-      // if timeout completed then kill the process return error. 
+    function finish(content: string, isError: boolean) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ content, isError });
+    }
 
-      // if the platform is child.kill() doesnt kill the child process
-      // so we use /T to kill whole tree
-      if (process.platform === "win32") {
-        spawn("taskkill", ["/F", "/T", "/PID", String(child.pid)]);
-      } else child.kill("SIGKILL");
-      output += `timed out after ${timeout / 1000} seconds`
+    child.stdout.on("data", (data) => { // on any success command data
+      output += data.toString();
+    });
+
+    child.stderr.on("data", (data) => { // on any command fail data
+      output += data.toString();
+    });
+
+    const timer = setTimeout(() => { // timeout to kill the child_process
+      if (child.pid !== undefined) {// if the child process is failed to spawn the pid is undefined so we add a check
+        try {
+          if (process.platform === "win32") {
+            const killer = spawn(
+              "taskkill",
+              ["/F", "/T", "/PID", String(child.pid)],
+              { windowsHide: true, stdio: "ignore" },
+            );
+
+            killer.on("error", () => {
+              child.kill("SIGKILL");
+            });
+          } else {
+            // Negative PID targets the process group created by detached.
+            // for linux/macos
+            process.kill(-child.pid, "SIGKILL");
+          }
+        } catch (error) {
+          // The process group might already have exited.
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+            output += `\nFailed to terminate command: ${error}`;
+          }
+        }
+      }
+      // Descendants may still hold the output pipes open.
+      child.stdout.destroy();
+      child.stderr.destroy();
+
+      finish(
+        `${output}\nTimed out after ${timeout / 1000} seconds`,
+        true,
+      );
     }, timeout);
 
-    child.on("error", (e) => { // if while spawning child process got some error
-      clearTimeout(timer);
-      resolve(`failed to start bash: ${e}`)
+    child.on("error", (error) => {
+      finish(`${output}\nFailed to start Bash: ${error.message}`, true);
     });
 
-    // on success close after running command
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve(`${output}\n exit code: ${code}`)
+    // after successully running command and child_process closes at end
+    child.on("close", (code, signal) => {
+      const status = signal
+        ? `terminated by signal: ${signal}`
+        : `exit code: ${code}`;
+
+      finish(`${output}\n${status}`, code !== 0);
     });
   })
-
 }
 
 
@@ -127,22 +171,24 @@ export const bashTool: Tool = {
         description: "Timeout in milliseconds (default: 30000)" // 30 secs default
       }
     },
-    requied: ["command", "timeout"]
+    requied: ["command"]
   },
 
   async execute(args) {
     // if windows then Git bash in windows cmd (this allows us to run UNIX style commands in windows cmd. like ls, pwd, cd, mkdir etc). 
     // then bash commands 
 
-    if (typeof args.command !== "string" || typeof args.timeout !== "number") {
+    const timeout = args.timeout ?? 30000; // if not timeout fallback to 30 sec
+
+    if (typeof args.command !== "string" || typeof args.timeout !== "number" || !Number.isInteger(timeout)) {
       return {
-        content: "Invalid argumnets. command must be string and timeout must be a number",
+        content: "Invalid argumnets. command must be string and timeout must be a postive integer upto 2147483647 milliseconds",
         isError: true
       }
     };
-    const res = truncateOutput(await runBash(args.command, args.timeout));
+    const result = await runBash(args.command, args.timeout ?? 30000);
     return {
-      content: res,
+      content: truncateOutput(result.content),
       isError: false
     }
   },
