@@ -2,10 +2,7 @@ import type { Tool, ToolResult } from "ai/types/tool";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs"
 import { delimiter, join } from "node:path";
-
-export const DEFAULT_MAX_LINES = 2000;
-export const DEFAULT_MAX_BYTES = 50 * 1024; // 50KB
-// after building add output accumulator. Bounded memory and tail truncation. process lifecycle to end after timeout
+import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateOutput } from "./utils/truncate";
 
 function findBash() {
   if (process.platform != "win32") {
@@ -41,40 +38,7 @@ function findBash() {
     "Bash not found. Install Git for Windows or add the directory containing bash.exe to PATH."
   );
 }
-// keep the END of the output (errors and results are usually at the bottom).
-// keep the last 2k lines then keep the las 51800 bytes of those 2k lines (as lines may have emoji and character which takes more bytes)
-function truncateOutput(output: string): string {
-  if (!output) return output;
 
-  const lines = output.split("\n");
-  let out = lines.slice(-DEFAULT_MAX_LINES).join("\n"); // grabs the last 2k lines (max or low) and joins them
-  let partialLine = false;
-
-  const bytes = Buffer.from(out, "utf8");
-
-  if (bytes.length > DEFAULT_MAX_BYTES) { // if more than max bytest. remove those bytes
-    // start is byte position where retained output should begin
-    // start = 60,000 - 51,200 = 8,800
-    // [ first 8,800 bytes ][ last 51,200 bytes ]
-    //        discard              keep
-    let start = bytes.length - DEFAULT_MAX_BYTES;
-
-    // Skip UTF-8 continuation bytes to avoid splitting a character.
-    while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) {
-      start++;
-    }
-
-    partialLine = bytes[start - 1] !== 0x0a;
-    out = bytes.subarray(start).toString("utf8");
-  }
-
-  if (out === output) return output;
-
-  const kept = out.split("\n");
-  const note = partialLine ? "; first shown line is partial" : "";
-
-  return `[truncated: showing the last ${kept.length} of ${lines.length} lines${note}]\n${out}`;
-}
 
 function runBash(command: string, timeout: number): Promise<ToolResult> { // returns string
   return new Promise((resolve) => {
@@ -171,7 +135,7 @@ export const bashTool: Tool = {
         description: "Timeout in milliseconds (default: 30000)" // 30 secs default
       }
     },
-    requied: ["command"]
+    required: ["command"]
   },
 
   async execute(args) {
@@ -179,19 +143,28 @@ export const bashTool: Tool = {
     // then bash commands 
 
     const timeout = args.timeout ?? 30000; // if not timeout fallback to 30 sec
+    if (typeof timeout !== "number") {
+      return {
+        content: "timeout must be a number",
+        isError: true,
+      };
+    }
 
-    if (typeof args.command !== "string" || typeof args.timeout !== "number" || !Number.isInteger(timeout)) {
+    if (
+      typeof args.command !== "string" ||
+      !Number.isInteger(timeout) ||
+      timeout <= 0 ||
+      timeout > 2_147_483_647) {
       return {
         content: "Invalid argumnets. command must be string and timeout must be a postive integer upto 2147483647 milliseconds",
         isError: true
       }
     };
-    const result = await runBash(args.command, args.timeout ?? 30000);
+    const result = await runBash(args.command, timeout);
     return {
       content: truncateOutput(result.content),
-      isError: false
+      isError: result.isError
     }
   },
-
-
 }
+
