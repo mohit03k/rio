@@ -92,6 +92,13 @@ export const grepTool: Tool = {
         isError: true
       }
     }
+    if (args.maxMatches! <= 0 || args.context! < 0) {
+
+      return {
+        content: "Invalid args: maxMatches should be positive integer and context must be a non-negative number",
+        isError: true
+      }
+    }
 
     const searchPath = args.path ? args.path : process.cwd();
 
@@ -217,8 +224,9 @@ export const grepTool: Tool = {
             const filePath = event.data?.path?.text;
             const lineNumber = event.data?.line_number;
             const lineText = event.data?.lines?.text;
-            if (filePath && typeof lineNumber === "number")
+            if (typeof filePath == "string" && typeof lineNumber === "number")
               matches.push({ filePath, lineNumber, lineText });
+            matchCount++;
             if (matchCount >= effectiveLimit) {
               matchLimitReached = true;
               stopChild(true);
@@ -277,6 +285,9 @@ export const grepTool: Tool = {
           const notices = []; // notices for for truncation or match Limits
           if (matchLimitReached) {
             notices.push(`${effectiveLimit} matches limit reached`)
+          }
+          if (truncated.truncated) {
+            notices.push(`${DEFAULT_MAX_BYTES} limit reached`)
           }
           if (linesTruncated) {
             notices.push(`Some lines are truncated to ${GREP_MAX_LINE_LENGTH} chars. Use read tool to see full lines`)
