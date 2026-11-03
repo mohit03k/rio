@@ -7,7 +7,7 @@ import { bashTool, editTool, grepTool, lsTool, readTool, writeTool } from "tools
 const { values } = parseArgs({
   options: {
     prompt: { type: "string", short: "p" },
-    provider: { type: "string", default: "openrouter" },
+    provider: { type: "string", default: "groq" },
     model: { type: "string" }
   }
 })

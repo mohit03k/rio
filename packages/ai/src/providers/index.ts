@@ -13,6 +13,7 @@ const providers: Record<string, () => Provider> = {
     "https://openrouter.ai/api/v1/",
     "qwen/qwen3.8-27b"),
   "google": () => createOpenAiCompatible("gemini", requireApiKey("GEMINI_API"), "https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-2.5-flash"),
+  "groq": () => createOpenAiCompatible("groq", requireApiKey("GROQ_API"), "https://api.groq.com/openai/v1", "qwen/qwen3.8-27b")
 }
 
 export function getProvider(name: string): Provider {
