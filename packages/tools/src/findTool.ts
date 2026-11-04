@@ -1,6 +1,4 @@
 import type { Tool } from "ai/types/tool";
-import { stat } from "node:fs/promises"
-import { serialize } from "node:v8";
 import { ensureTool } from "./utils/helper";
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -86,7 +84,7 @@ export const findTool: Tool = {
         // else cahgne the current dir. 
         const parent = path.dirname(current) // goes one folder outisde to parent folder if .git not found
         if (parent == current) break; // no .git found
-        current == parent
+        current = parent
       }
 
       if (!insideGitRepo) fdArgs.push("--no-require-git")

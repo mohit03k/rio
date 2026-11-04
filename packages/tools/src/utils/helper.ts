@@ -32,7 +32,7 @@ const TOOLS: Record<string, ToolsConfig> = {
     tagPrefix: "v", // eg. v10.3.0
     systemBinaryNames: ["fd", "fdfind"],
     binaryName: "fd",
-    getAssetName: (version, target) => `fd-${version}-${target}`
+    getAssetName: (version, target) => `fd-v${version}-${target}`
   }
 }
 /**
@@ -58,6 +58,7 @@ export async function ensureTool(tool: "rg" | "fd") {
     return path;
   } catch (e) {
     // if some error occured on download tool return undefined
+    console.error(`Failed to install ${tool}:`, e);
     return undefined;
   }
 
@@ -92,6 +93,7 @@ async function downloadTool(tool: "rg" | "fd") {
   const config = TOOLS[tool];
   if (!config) throw new Error(`Unkown tool ${tool}`)
 
+  console.log("downloadTool ran")
   // get the target to download based on platform and architecture
   const plat = platform();
   const architecture = arch(); // example x64. arm64 etc
@@ -269,6 +271,7 @@ function extractZip(pathForTool: string, extractDir: string) {
 
 // downloads a file from url, and put it in destination
 async function downloadFile(downloadUrl: string, destination: string) {
+  console.log("downloadFile ran")
 
   const response = await fetch(downloadUrl);
   if (!response.ok || !response.body) {
@@ -295,11 +298,27 @@ function getFilePath(tool: "rg" | "fd"): string | null {
 
   const systemBinaryNames = config.systemBinaryNames ?? [config.binaryName];
 
+  // if the download tool is not actually on PATH. this will redownload the tool again and again. so we check the bin before doing anything
+  const binaryName =
+    config.binaryName + (platform() === "win32" ? ".exe" : "");
+
+  const localPath = join(
+    homedir(),
+    APP_NAME,
+    "agent",
+    "bin",
+    binaryName,
+  );
+
+  if (existsSync(localPath)) {
+    return localPath;
+  }
+
   for (const name of systemBinaryNames) {
     try {
       const res = spawnSync(name, ["--version"], { stdio: "pipe" });
-      if (res.error !== undefined || res.error !== null) {
-        return name
+      if (!res.error && res.status === 0) {
+        return name;
       }
     } catch {
     }
