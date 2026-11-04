@@ -25,13 +25,21 @@ const TOOLS: Record<string, ToolsConfig> = {
     tagPrefix: "",
     binaryName: "rg",
     getAssetName: (version, target) => `ripgrep-${version}-${target}`
+  },
+  fd: {
+    name: "fd",
+    repo: "sharkdp/fd", // official fd tool repo
+    tagPrefix: "v", // eg. v10.3.0
+    systemBinaryNames: ["fd", "fdfind"],
+    binaryName: "fd",
+    getAssetName: (version, target) => `fd-${version}-${target}`
   }
 }
 /**
  * Ensure a tool is available, downloading if necessary.
  * Returns the tool path, or undefined if unavailable.
  */
-export async function ensureTool(tool: "rg") {
+export async function ensureTool(tool: "rg" | "fd") {
   const pathExists = getFilePath(tool);
   if (pathExists) { // means tool already exists
     return pathExists;
@@ -42,7 +50,6 @@ export async function ensureTool(tool: "rg") {
   if (!config) return undefined;
 
   if (platform() === "android") {
-
     return undefined
   }
 
@@ -81,7 +88,7 @@ async function getLatestVersion(repo: string) {
 
 
 // if path doesnt exist, means we download and install the tool
-async function downloadTool(tool: "rg") {
+async function downloadTool(tool: "rg" | "fd") {
   const config = TOOLS[tool];
   if (!config) throw new Error(`Unkown tool ${tool}`)
 
@@ -105,7 +112,7 @@ async function downloadTool(tool: "rg") {
 
   const version = await getLatestVersion(config.repo);
   //             {version} - {target}
-  // so ripgrep-15.2.0-unknown-linux-musl.tar.gz
+  // so ripgrep-15.2.0-aarch64-unknown-linux-musl.tar.gz
   const assetName = config.getAssetName(version, target);
 
   const res = join(homedir(), APP_NAME, "agent")
@@ -281,7 +288,7 @@ async function downloadFile(downloadUrl: string, destination: string) {
 /**
   * given the tool. run the command by spawing child_process to know if it exists. return path if does
 */
-function getFilePath(tool: "rg"): string | null {
+function getFilePath(tool: "rg" | "fd"): string | null {
   const config = TOOLS[tool];
 
   if (!config) return null

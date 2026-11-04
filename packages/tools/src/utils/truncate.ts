@@ -47,8 +47,9 @@ export function truncateOutput(output: string): string {
   return `[truncated: showing the last ${kept.length} of ${lines.length} lines${note}]\n${out}`;
 }
 
-export function truncateHead(content: string): TruncateHeadResult {
+export function truncateHead(content: string, maxLines?: number): TruncateHeadResult {
 
+  const maxlineslimit = maxLines ?? DEFAULT_MAX_LINES;
   const totalBytes = Buffer.byteLength(content, "utf-8");
   const lines = content.length === 0 ? [] : content.split("\n");
   if (content.endsWith("\n")) {
@@ -56,8 +57,9 @@ export function truncateHead(content: string): TruncateHeadResult {
   }
   const totalLines = lines.length
 
+
   // Check if no truncation needed
-  if (totalLines <= DEFAULT_MAX_LINES && totalBytes <= DEFAULT_MAX_BYTES) {
+  if (totalLines <= maxlineslimit && totalBytes <= DEFAULT_MAX_BYTES) {
     return {
       content,
       truncated: false,
@@ -71,7 +73,7 @@ export function truncateHead(content: string): TruncateHeadResult {
   let outputBytesCount = 0;
   let truncatedBy: "lines" | "bytes" = "lines";
 
-  for (let i = 0; i < lines.length && i < DEFAULT_MAX_LINES; i++) { // for each line
+  for (let i = 0; i < lines.length && i < maxlineslimit; i++) { // for each line
     const lineBytes = Buffer.byteLength(lines[i]!, "utf-8") + (i > 0 ? 1 : 0); // each line bytes
 
     if (outputBytesCount + lineBytes > DEFAULT_MAX_BYTES) {
@@ -84,7 +86,7 @@ export function truncateHead(content: string): TruncateHeadResult {
   }
 
   // If we exited due to line limit
-  if (outputLinesArray.length >= DEFAULT_MAX_LINES && outputBytesCount <= DEFAULT_MAX_BYTES) {
+  if (outputLinesArray.length >= maxlineslimit && outputBytesCount <= DEFAULT_MAX_BYTES) {
     truncatedBy = "lines";
   }
   const outputContent = outputLinesArray.join("\n"); // join the lines to raw text by \n
