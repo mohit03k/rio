@@ -7,6 +7,7 @@ function requireApiKey(name: string): string {
   return value;
 }
 
+
 const providers: Record<string, () => Provider> = {
   "anthropic": () => createOpenAiCompatible("anthropic", requireApiKey("CLAUDE_API"), "https://api.anthropic.com/v1", "claude-opus-5-5"),
   "openrouter": () => createOpenAiCompatible("qwen", requireApiKey("OPENROUTER_API"),
