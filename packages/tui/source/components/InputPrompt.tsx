@@ -22,6 +22,8 @@ export const InputPrompt = ({
 }: InputPromptProps) => {
 	const { exit } = useApp();
 	const [value, setValue] = useState('');
+	// to move cursor with keys in input
+	const [cursor, setCursor] = useState(0);
 	const [commandmenu, setCommandMenu] = useState(false);
 	const [submenu, setSubmenu] = useState<{ title: string, options: SubMenuOption[], onSelect: (value: string) => void } | null>(null);
 
@@ -36,6 +38,7 @@ export const InputPrompt = ({
 	function onHandleSelect(item: Command) {
 		setCommandMenu(false) // close the commandmenu
 		setValue('')
+		setCursor(0)
 		if (!item.action) return
 		if (item.action.kind === 'run') {
 			item.action.run()
@@ -49,6 +52,7 @@ export const InputPrompt = ({
 			if (commandmenu) {
 				setCommandMenu(false)
 				setValue("")
+				setCursor(0);
 			} else {
 				exit()
 			}
@@ -72,31 +76,49 @@ export const InputPrompt = ({
 
 			if (prompt) {
 				setValue("");
+				setCursor(0)
 				void onSubmit(prompt);
 			}
 
 			return;
 		}
 
-		if (input === "/" && value === "" && !submenu) {
-			setCommandMenu(true)
-			setValue(prev => prev + input)
-			return
+		if (key.leftArrow) {
+			setCursor(position => Math.max(0, position - 1));
+			return;
 		}
 
-		if (commandmenu && key.delete) {
-			setValue(prev => prev.slice(0, -1))
-			if (value.slice(-1) == "/" && value.length == 1) {
-				setCommandMenu(false)
-			}
-			return
+		if (key.rightArrow) {
+			setCursor(position => Math.min(value.length, position + 1));
+			return;
 		}
-		if (key.backspace || key.delete) {
-			setValue(prev => (prev.length > 0 ? prev.slice(0, -1) : prev))
-			return
+
+		if (key.backspace || key.delete) { // if deleting the input value
+			if (cursor === 0) return;
+
+			const nextValue =
+				value.slice(0, cursor - 1) + value.slice(cursor);
+
+			setValue(nextValue);
+			setCursor(cursor - 1);
+
+			if (commandmenu && nextValue === "") {
+				setCommandMenu(false);
+			}
+
+			return;
 		}
 		if (input && !key.ctrl && !key.meta) {
-			setValue(prev => prev + input)
+			if (input === "/" && value === "" && !submenu) {
+				setCommandMenu(true);
+			}
+
+			// finally set the value
+			setValue(
+				value.slice(0, cursor) + input + value.slice(cursor),
+			);
+			// and set the cursor. prev lenght of cursor + length of input
+			setCursor(cursor + input.length);
 		}
 	},) // this hook is only active if loginOpen is not opened
 
@@ -111,7 +133,10 @@ export const InputPrompt = ({
 				{value ? ( // this is the live input prompt user currently typing
 					<Text>
 						{PROMPT}
-						{value}<Text inverse> </Text></Text>
+						{value.slice(0, cursor)}
+						<Text inverse>{value[cursor] ?? " "}</Text>
+						{value.slice(cursor + 1)}
+					</Text>
 				) : (
 					<Text color="gray">
 						{PROMPT}
