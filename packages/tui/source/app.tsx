@@ -1,6 +1,7 @@
 import { Box, Text, useApp } from "ink";
 import BigText from "ink-big-text";
 import { useMemo, useRef, useState } from "react";
+
 import type { Message } from "ai/types/provider";
 import { getProvider } from "ai/providers";
 import { runLoop } from "core/agent/loop";
@@ -54,6 +55,8 @@ export default function App() {
 		addEntry("user", text);
 
 		// Commit only a successful run, avoiding incomplete tool calls after errors.
+		// example on first user prompt this will be
+		// {role: "user", content: "prompt from user"}
 		const nextMessages: Message[] = [...messages.current, { role: "user", content: text }];
 		let assistantId: string | undefined;
 		let assistantText = "";
@@ -70,7 +73,7 @@ export default function App() {
 				provider: getProvider("openrouter"),
 				model: currentModel,
 				tools: TOOLS,
-				messages: nextMessages,
+				messages: nextMessages, // the loop directly push the tool call assistant messages. directly this nextMessages array
 				onEvent(event) {
 					if (event.type === "text_delta") {
 						assistantText += event.text; // llm assistant sent back some text
@@ -99,6 +102,7 @@ export default function App() {
 						const id = addEntry("tool", `${event.call.name}: running...`);
 						toolEntries.set(event.call.id, id);
 					} else if (event.type === "tool_end") { // tool calling ended
+						// get the particular tool call that was in running phase. to update its entry with status
 						const id = toolEntries.get(event.call.id);
 						if (id !== undefined) {
 							const status = event.isError ? "failed" : "done";
@@ -107,6 +111,9 @@ export default function App() {
 					}
 				},
 			});
+			// Then this line saves that array as the history for future prompts
+			// then the second prompt from user gets appended to this array so the model remembers conversation
+			// if runLoop throws erros then this assign is skipped . keeping only previous history before this loop run. and error is showed in tui
 			messages.current = nextMessages;
 		} catch (error) {
 			addEntry("error", error instanceof Error ? error.message : String(error));
@@ -140,20 +147,54 @@ export default function App() {
 			<Box marginLeft={1}>
 				<BigText text="Rio" font="tiny" colors={["gray"]} />
 			</Box>
-			{entries.map(entry => entry.kind === "user" ? (
-				<InputHistory key={entry.id} prompt={entry.text} />
-			) : (
-				<Box key={entry.id} flexDirection="column" marginBottom={1}>
-					<Text bold color={entry.kind === "error" ? "red" : "gray"}>{entry.kind}</Text>
-					<Text>{entry.text}</Text>
-				</Box>
-			))}
+			{entries.map((entry) => {
+				const lines = entry.text.trimEnd().split("\n");
+				const firstLine = lines[0];
+				const outputLines = lines.slice(1);
+
+				const firstOutputLine = outputLines.find(
+					(line) => line.trim() !== ""
+				);
+				const remaining = Math.max(0, outputLines.length - (firstOutputLine ? 1 : 0));
+
+				return entry.kind === "user" ? (
+					<InputHistory key={entry.id} prompt={entry.text} />
+				) : (
+					<Box key={entry.id} flexDirection="column" marginBottom={1}>
+						{entry.kind === "error" && <Text bold color={"red"}>
+							{entry.kind}
+						</Text>}
+						{entry.kind === "tool" ? (
+							<Box flexDirection="column">
+								<Text bold color="white">{firstLine}</Text>
+
+								{firstOutputLine !== undefined && (
+									<Box paddingLeft={2} flexDirection="column">
+										<Text dimColor wrap="truncate">
+											{firstOutputLine}
+										</Text>
+
+										{remaining > 0 && (
+											<Text dimColor>+{remaining} lines</Text>
+										)}
+									</Box>
+								)}
+							</Box>
+						) : (
+							<Text>{entry.text}</Text>
+						)}
+					</Box>
+				);
+			})
+			}
 			{isRunning && <Text dimColor>Working...</Text>}
-			{loginOpen ? (
-				<LoginPrompt onSubmit={handleLoginSubmit} onCancel={() => setLoginOpen(false)} />
-			) : (
-				<InputPrompt context={context} currentModel={currentModel} onSubmit={handleSubmit} isRunning={isRunning} />
-			)}
-		</Box>
+			{
+				loginOpen ? (
+					<LoginPrompt onSubmit={handleLoginSubmit} onCancel={() => setLoginOpen(false)} />
+				) : (
+					<InputPrompt context={context} currentModel={currentModel} onSubmit={handleSubmit} isRunning={isRunning} />
+				)
+			}
+		</Box >
 	);
 }
