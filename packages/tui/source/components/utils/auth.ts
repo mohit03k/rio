@@ -3,7 +3,7 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 
 const CONFIG_DIR = join(homedir(), '.rio') // homedir gets the /home/cell path
-const AUTH_PATH = join(CONFIG_DIR, 'auth.json')
+const AUTH_PATH = join(CONFIG_DIR, 'auth.json') // home/cell/.rio/auth.json
 
 export async function saveApiKey(apiKey: string) {
 	const input = {

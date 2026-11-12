@@ -109,7 +109,6 @@ export function createOpenAiCompatible(name: string, apiKey: string, baseUrl: st
           console.warn(`skipping tool call ${call.name} because stopped on half args due to length reason of max tokens`, call.args)
           continue;
         }
-        console.log("a call", call);
         // finally json .parse to convert json string to js object. or if empty then empty object
         content.push({ type: "tool_call", id: call.id, name: call.name, arguments: args })
       }

@@ -25,13 +25,13 @@ export function Submenu({ title: _title, options, onSelect, onCancel, filterText
 			setSelectedIndex(prev => Math.max(prev - 1, 0))
 		}
 		if (key.downArrow) {
-			setSelectedIndex(prev => Math.min(prev + 1, options.length - 1))
+			setSelectedIndex(prev => Math.min(prev + 1, filteredOptions.length - 1))
 		}
 		if (key.escape) {
 			onCancel()
 		}
-		if (key.return && options[selectedIndex]) {
-			onSelect(options[selectedIndex]) // selected command gets populated to InputPrompt comp
+		if (key.return && filteredOptions[selectedIndex]) {
+			onSelect(filteredOptions[selectedIndex]) // selected command gets populated to InputPrompt comp
 		}
 	})
 

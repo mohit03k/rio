@@ -2,24 +2,30 @@ import { useMemo, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { CommandMenu } from './command/index.js';
 import { Submenu } from './SubMenu.js';
-import { Command, SubMenuOption } from './command/types.js';
+import type { Command, SubMenuOption, CommandContext } from './command/types.js';
 import { allcommands } from './command/commands.js';
-
-import { SessionStore } from 'core/session/SessionStore';
-import { InputHistory } from './InputHistory.js';
 
 const PROMPT = "> "
 
-export const InputPrompt = ({ session, context, currentModel }: { session: SessionStore, context: any, currentModel: string }) => {
+type InputPromptProps = {
+	context: CommandContext;
+	currentModel: string;
+	onSubmit: (prompt: string) => Promise<void>;
+	isRunning: boolean;
+}
+
+export const InputPrompt = ({
+	context,
+	currentModel,
+	onSubmit,
+	isRunning,
+}: InputPromptProps) => {
 	const { exit } = useApp();
 	const [value, setValue] = useState('');
-	const [commandmenu, setCommandMenu] = useState(false)
-	const [submenu, setSubmenu] = useState<{ title: string, options: SubMenuOption[], onSelect: (value: string) => void } | null>(null)
-	const [inputHistory, setInputHistory] = useState(false)
-	const [inputHistoryValue, setInputHistoryValue] = useState('')
+	const [commandmenu, setCommandMenu] = useState(false);
+	const [submenu, setSubmenu] = useState<{ title: string, options: SubMenuOption[], onSelect: (value: string) => void } | null>(null);
 
-
-	//so Input Prompt file mainly becomes things to wire up
+	// so Input Prompt file mainly becomes things to wire up
 	// we pass all the context(functions) required by those commands to run
 
 
@@ -39,37 +45,6 @@ export const InputPrompt = ({ session, context, currentModel }: { session: Sessi
 	}
 
 	useInput((input, key) => {
-		if (key.escape) {
-			if (commandmenu) setCommandMenu(false)
-			if (submenu) setSubmenu(null)
-			return
-		}
-
-		if (key.return) {
-			if (commandmenu) {
-				setCommandMenu(false)
-				return
-			}
-
-			if (value.trim().length > 0) {
-				console.log("return with some input")
-				if (!session.firstMessage) {
-					console.log("first message")
-				}
-				setInputHistoryValue(value)
-				setInputHistory(true)
-				setValue('')
-				return
-			}
-			return
-		}
-
-
-		if (input == "/" && !submenu) {
-			setCommandMenu(true)
-			setValue(prev => prev + input)
-			return
-		}
 		if (key.ctrl && input === 'c') {
 			if (commandmenu) {
 				setCommandMenu(false)
@@ -79,6 +54,36 @@ export const InputPrompt = ({ session, context, currentModel }: { session: Sessi
 			}
 			return
 		}
+		if (isRunning) return;
+
+		if (key.escape) {
+			if (commandmenu) setCommandMenu(false)
+			if (submenu) setSubmenu(null)
+			return
+		}
+
+		if (submenu && (key.return || key.upArrow || key.downArrow)) return;
+
+		if (key.return) {
+			// CommandMenu handles command selection itself.
+			if (commandmenu) return;
+
+			const prompt = value.trim();
+
+			if (prompt) {
+				setValue("");
+				void onSubmit(prompt);
+			}
+
+			return;
+		}
+
+		if (input === "/" && value === "" && !submenu) {
+			setCommandMenu(true)
+			setValue(prev => prev + input)
+			return
+		}
+
 		if (commandmenu && key.delete) {
 			setValue(prev => prev.slice(0, -1))
 			if (value.slice(-1) == "/" && value.length == 1) {
@@ -95,17 +100,15 @@ export const InputPrompt = ({ session, context, currentModel }: { session: Sessi
 		}
 	},) // this hook is only active if loginOpen is not opened
 
-
 	return (
 		<>
-			{inputHistory && <InputHistory prompt={inputHistoryValue} />}
 			<Box
 				borderStyle="round"
 				borderLeft={false}
 				borderRight={false}
 				borderColor="gray"
 			>
-				{value ? (
+				{value ? ( // this is the live input prompt user currently typing
 					<Text>
 						{PROMPT}
 						{value}<Text inverse> </Text></Text>
@@ -122,16 +125,15 @@ export const InputPrompt = ({ session, context, currentModel }: { session: Sessi
 				<Submenu
 					title={submenu.title}
 					options={submenu.options}
-					onSelect={(v) => { submenu.onSelect(v.label); setSubmenu(null) }}
+					onSelect={(v) => { submenu.onSelect(v.value); setSubmenu(null) }}
 					onCancel={() => { setSubmenu(null) }}
 					filterText={value}
 				/>
 			)}
-
 			<Box paddingX={1}>
 				<Text dimColor> {currentModel} </Text>
 				<Text>• </Text>
-				<Text bold>app/web/</Text>
+				<Text bold>{process.cwd()}</Text>
 			</Box>
 		</>
 	)

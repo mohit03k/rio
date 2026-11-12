@@ -13,7 +13,6 @@ export function allcommands(ctx: CommandContext): Command[] { // so we get all t
 				onSelect: (v: any) => {
 					// do something with the value selected
 					// also set the current model in the ui to this
-					console.log("model", v)
 					ctx.selectModel(v)
 				},
 			}

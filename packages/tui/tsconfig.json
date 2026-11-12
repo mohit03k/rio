@@ -2,10 +2,16 @@
 	"extends": "@sindresorhus/tsconfig",
 	"compilerOptions": {
 		"outDir": "dist",
-		"module": "NodeNext",
-		"moduleResolution": "NodeNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
 		"target": "ES2022",
-		"jsx": "react-jsx"
+		"jsx": "react-jsx",
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"noPropertyAccessFromIndexSignature": false,
+		"lib": [
+			"ES2022"
+		]
 	},
 	"include": [
 		"source"

@@ -93,7 +93,6 @@ async function downloadTool(tool: "rg" | "fd") {
   const config = TOOLS[tool];
   if (!config) throw new Error(`Unkown tool ${tool}`)
 
-  console.log("downloadTool ran")
   // get the target to download based on platform and architecture
   const plat = platform();
   const architecture = arch(); // example x64. arm64 etc
@@ -271,7 +270,6 @@ function extractZip(pathForTool: string, extractDir: string) {
 
 // downloads a file from url, and put it in destination
 async function downloadFile(downloadUrl: string, destination: string) {
-  console.log("downloadFile ran")
 
   const response = await fetch(downloadUrl);
   if (!response.ok || !response.body) {

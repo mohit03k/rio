@@ -5,7 +5,7 @@ import fs from "fs"
 export class SessionStore { // every time a rio is on. A new SessionStore is created with that cwd and model. storing session details temp
   // in memory until any first messages is initiated for user
   private session: any;
-  private firstMessage = false
+  public hasWrittenFile = false
 
   constructor(cwd: string, model: string) { // process.cwd
     this.session = {
@@ -22,16 +22,36 @@ export class SessionStore { // every time a rio is on. A new SessionStore is cre
     this.writeToFile(message)
   }
 
+  private writeSessionHeader(filepath: string) {
+    const message = {
+      type: "session",
+      id: this.session.sessionId,
+      cwd: this.session.cwd,
+      timestamp: this.session.createdAt,
+    }
+    fs.mkdirSync(filepath, { recursive: true })
+    fs.writeFileSync(filepath, JSON.stringify(message) + '\n');
+  }
+
   private writeToFile(message: any) {
     const filepath = this.getFilePath()
     // if this is the first time first make that path
-    if (!this.firstMessage) { // if this is the first create the file and writeto file
-      fs.mkdirSync(filepath)
-      fs.writeFileSync(filepath, message)
-      this.firstMessage = true
+    if (!this.hasWrittenFile) { // if this is the first message create the file and write to file
+      // first write session header
+      this.writeSessionHeader(filepath)
+      this.hasWrittenFile = true
     }
-    // else just append the message to  it
-    fs.appendFileSync(filepath, message)
+    const entry = {
+      type: "message",
+      id: Math.random().toString(36).slice(2, 12),
+      timestamp: new Date().toISOString(),
+      message: {
+        role: "user",
+        content: [{ type: "text", text: message }]
+      }
+    }
+    // then write the message
+    fs.appendFileSync(filepath, JSON.stringify(entry) + '\n');
   }
 
   private getFilePath() {

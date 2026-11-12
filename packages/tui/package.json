@@ -8,10 +8,11 @@
 		"node": ">=20"
 	},
 	"scripts": {
-		"build": "tsc",
+		"build": "tsc --noEmit && bun build ./source/cli.tsx --target=bun --packages=external --outdir=dist",
 		"dev": "tsc --watch",
-		"cli": "tsc && bun dist/cli.js",
-		"test": "prettier --check . && xo && ava"
+		"cli": "bun source/cli.tsx",
+		"test": "prettier --check . && xo && ava",
+		"test:agent": "bun test ./test/app.test.tsx"
 	},
 	"files": [
 		"dist"
@@ -22,7 +23,10 @@
 		"ink-scroll-list": "^0.4.1",
 		"meow": "^11.0.0",
 		"oh-my-logo": "^0.5.0",
-		"react": "^19.2.0"
+		"react": "^19.2.0",
+		"core": "*",
+		"ai": "workspace:*",
+		"tools": "workspace:*"
 	},
 	"devDependencies": {
 		"@sindresorhus/tsconfig": "^3.0.1",
