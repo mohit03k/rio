@@ -12,6 +12,7 @@ type InputPromptProps = {
 	currentModel: string;
 	onSubmit: (prompt: string) => Promise<void>;
 	isRunning: boolean;
+	onAbort: () => void
 }
 
 export const InputPrompt = ({
@@ -19,6 +20,7 @@ export const InputPrompt = ({
 	currentModel,
 	onSubmit,
 	isRunning,
+	onAbort,
 }: InputPromptProps) => {
 	const { exit } = useApp();
 	const [value, setValue] = useState('');
@@ -48,6 +50,16 @@ export const InputPrompt = ({
 	}
 
 	useInput((input, key) => {
+		const isCtrlC = key.ctrl && input === "c";
+
+		if (isRunning) { // if loop is running only then
+			if (key.escape || isCtrlC) {
+				onAbort();
+			}
+			return;
+		}
+
+
 		if (key.ctrl && input === 'c') {
 			if (commandmenu) {
 				setCommandMenu(false)
@@ -58,7 +70,6 @@ export const InputPrompt = ({
 			}
 			return
 		}
-		if (isRunning) return;
 
 		if (key.escape) {
 			if (commandmenu) setCommandMenu(false)

@@ -41,7 +41,7 @@ export function createOpenAiCompatible(name: string, apiKey: string, baseUrl: st
   return {
     name,
     defaultModel,
-    async *stream({ model, messages, system, tools = [] }) { // if not tools passed defaults to empty array
+    async *stream({ model, messages, system, tools = [], signal }) { // if not tools passed defaults to empty array
 
       const chat = toOpenAi(messages);
       const stream = await openai.chat.completions.create({
@@ -54,7 +54,7 @@ export function createOpenAiCompatible(name: string, apiKey: string, baseUrl: st
         })) : undefined,
         stream_options: { include_usage: true },
         max_completion_tokens: 8192
-      });
+      }, { signal });
 
       let text = "";
       const calls: { id: string; name: string; args: string }[] = [] // each tool call from llm response contains id name of tool and args

@@ -11,6 +11,7 @@ export type AgentEvent = { type: "text_delta", text: string } |
 
 export type AgentOptions = { // will be passed as args in runAgent function
   provider: Provider;
+  signal?: AbortSignal; // gets the signal whether controller aborted or not readonly
   messages: Message[];
   system?: string;
   tools: Tool[];

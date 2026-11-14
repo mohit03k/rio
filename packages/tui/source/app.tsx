@@ -30,6 +30,7 @@ export default function App() {
 
 	// Model history includes structured tool calls and results, unlike display entries.
 	const messages = useRef<Message[]>([]);
+	const activeController = useRef<AbortController | null>(null);
 	const running = useRef(false);
 
 	function addEntry(kind: entryKind, text: string) {
@@ -48,6 +49,9 @@ export default function App() {
 		const text = prompt.trim();
 		if (!text || running.current) return; // if the prompt is somehow empty or currently the loop is running. dont let user submit another
 
+		// create the controller only when prompt it submitted
+		const controller = new AbortController();
+		activeController.current = controller;
 		// The ref prevents a second submission before React renders the busy state.
 		running.current = true;
 		setIsRunning(true);
@@ -71,6 +75,7 @@ export default function App() {
 
 			await runLoop({
 				provider: getProvider("openrouter"),
+				signal: controller.signal,
 				model: currentModel,
 				tools: TOOLS,
 				messages: nextMessages, // the loop directly push the tool call assistant messages. directly this nextMessages array
@@ -116,8 +121,13 @@ export default function App() {
 			// if runLoop throws erros then this assign is skipped . keeping only previous history before this loop run. and error is showed in tui
 			messages.current = nextMessages;
 		} catch (error) {
-			addEntry("error", error instanceof Error ? error.message : String(error));
+			if (controller.signal.aborted) {
+				addEntry("error", "Run aborted")
+			} else {
+				addEntry("error", error instanceof Error ? error.message : String(error));
+			}
 		} finally {
+			activeController.current = null; // finally after loop function empty the  controller again
 			running.current = false;
 			setIsRunning(false);
 		}
@@ -140,6 +150,10 @@ export default function App() {
 		await saveApiKey(apiKey);
 		process.env.OPENROUTER_API = apiKey;
 		setLoginOpen(false);
+	}
+
+	function handleAbort() {
+		activeController.current?.abort();
 	}
 
 	return (
@@ -192,7 +206,7 @@ export default function App() {
 				loginOpen ? (
 					<LoginPrompt onSubmit={handleLoginSubmit} onCancel={() => setLoginOpen(false)} />
 				) : (
-					<InputPrompt context={context} currentModel={currentModel} onSubmit={handleSubmit} isRunning={isRunning} />
+					<InputPrompt onAbort={handleAbort} context={context} currentModel={currentModel} onSubmit={handleSubmit} isRunning={isRunning} />
 				)
 			}
 		</Box >

@@ -40,6 +40,7 @@ export interface StreamOptions {
   messages: Message[]
   system?: string
   tools: Tool[]
+  signal?: AbortSignal;
 }
 
 // while iterating on the openi ai provider the yield will either return text_delta or done . as defined in openAi compatible
