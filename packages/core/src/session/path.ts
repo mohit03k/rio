@@ -1,20 +1,17 @@
-import os from "node:os"
-import path from "node:path"
+import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { homedir } from "node:os"
+import path, { join } from "node:path"
 // function to get session path to load in the tui. if user decides to resume a session
 
-// Gets the base path for all sessions
-export function getSessionPath() {
-  return path.join(os.homedir(), ".rio", "sessions")
+
+export function getSessionDirectory(cwd: string): string {
+  // turns messy path home/user/project/src/../ to /home/user/project/pacakge.json
+  const directory = realpathSync(cwd);
+
+  const hash = createHash("sha256")
+    .update(directory) // will generate the same hash everytime on same directory
+    .digest("hex");
+
+  return join(homedir(), ".rio", "sessions", hash); // /home/cell/.rio/sessions/ada09dsg0a09f8asalksdg0asdgii
 }
-
-export function getSessionFilePath(sessionId: string, date: Date) {
-  const year = date.getFullYear().toString()
-  const month = String(date.getMonth() + 1).padStart(2, '0') // makes hte month from 5 to 05
-  const day = date.getDay().toString()
-
-  return path.join(getSessionPath(), year, month, day, `${sessionId}.jsonl`)
-}
-
-
-
-

@@ -68,7 +68,13 @@ export async function runLoop({
       }
       onEvent({ type: "tool_end", call: block, result: res.content, isError: res.isError })
       // after tool call push it to messages array
-      push({ role: "toolResult", toolCallId: block.id, toolName: block.name, content: res.content })
+      push({
+        role: "toolResult",
+        toolCallId: block.id,
+        toolName: block.name,
+        content: res.content,
+        isError: res.isError,
+      });
     }
     // after pushing tools result to messages the loop will run again and based on response if its tools use or "done"
   }

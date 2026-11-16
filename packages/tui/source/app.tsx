@@ -1,7 +1,6 @@
 import { Box, Text, useApp } from "ink";
 import BigText from "ink-big-text";
 import { useMemo, useRef, useState } from "react";
-
 import type { Message } from "ai/types/provider";
 import { getProvider } from "ai/providers";
 import { runLoop } from "core/agent/loop";
@@ -10,6 +9,7 @@ import { InputPrompt } from "./components/InputPrompt.js";
 import { InputHistory } from "./components/InputHistory.js";
 import { LoginPrompt } from "./components/LoginPrompt.js";
 import { loadApiKey, saveApiKey } from "./components/utils/auth.js";
+import { SessionStore } from "core/session/SessionStore";
 
 const TOOLS = [readTool, writeTool, editTool, bashTool, grepTool, findTool, lsTool];
 
@@ -21,15 +21,43 @@ type ChatEntry = { // to show in tui. what currently the agent is doing high lev
 	text: string;
 };
 
-export default function App() {
+function restoreMessage(messages: Message[]) {
+	const entries: ChatEntry[] = []
+
+	for (const message of messages) {
+		if (message.role === "user") {
+			entries.push({ id: crypto.randomUUID(), kind: "user", text: message.content })
+		} else if (message.role === "assistant") {
+			// join all assistant content block that is type text. we dont want tool call and results
+			const text = message.content.filter(c => c.type == "text").map(b => b.text).join("");
+			if (text) {
+				entries.push({ id: crypto.randomUUID(), kind: "assistant", text: text })
+			}
+		} else {
+			entries.push({
+				id: crypto.randomUUID(), kind: "tool", text:
+					`${message.toolName}: ` +
+					`${message.isError ? "failed" : "done"}\n` +
+					message.content,
+			})
+		}
+	}
+	return entries
+}
+
+type AppProps = {
+	initialSession?: SessionStore
+}
+
+export default function App({ initialSession }: AppProps) {
 	const { exit } = useApp();
-	const [currentModel, setCurrentModel] = useState("qwen/qwen3.8-27b");
+	const [currentModel, setCurrentModel] = useState(() => initialSession?.header.model ?? "qwen/qwen3.8-27b");
+	const [session, setSession] = useState(() => initialSession ?? SessionStore.create(process.cwd(), "openrouter", currentModel))
+	const [entries, setEntries] = useState<ChatEntry[]>(() => restoreMessage(session.getMessages()));
 	const [loginOpen, setLoginOpen] = useState(false);
-	const [entries, setEntries] = useState<ChatEntry[]>([]);
 	const [isRunning, setIsRunning] = useState(false);
 
 	// Model history includes structured tool calls and results, unlike display entries.
-	const messages = useRef<Message[]>([]);
 	const activeController = useRef<AbortController | null>(null);
 	const running = useRef(false);
 
@@ -61,12 +89,15 @@ export default function App() {
 		// Commit only a successful run, avoiding incomplete tool calls after errors.
 		// example on first user prompt this will be
 		// {role: "user", content: "prompt from user"}
-		const nextMessages: Message[] = [...messages.current, { role: "user", content: text }];
 		let assistantId: string | undefined;
 		let assistantText = "";
 		const toolEntries = new Map<string, string>();
 
 		try {
+			session.repairInterruptedTools()
+			session.appendMessage({ role: "user", content: prompt })
+			const nextMessages = session.getMessages();
+
 			// if not api key in .env. load from homedir .rio/auth.json and set in .env
 			if (!process.env.OPENROUTER_API?.trim()) {
 				const savedKey = await loadApiKey();
@@ -74,12 +105,16 @@ export default function App() {
 			}
 
 			await runLoop({
-				provider: getProvider("openrouter"),
+				provider: getProvider(session.header.provider),
 				signal: controller.signal,
 				model: currentModel,
 				tools: TOOLS,
 				messages: nextMessages, // the loop directly push the tool call assistant messages. directly this nextMessages array
 				onEvent(event) {
+					if (event.type === "message") {
+						session.appendMessage(event.message);
+						return;
+					}
 					if (event.type === "text_delta") {
 						assistantText += event.text; // llm assistant sent back some text
 						// every single run assistantId is added to entries. and on every agent event on same run updates the assistantText
@@ -116,10 +151,8 @@ export default function App() {
 					}
 				},
 			});
-			// Then this line saves that array as the history for future prompts
-			// then the second prompt from user gets appended to this array so the model remembers conversation
+
 			// if runLoop throws erros then this assign is skipped . keeping only previous history before this loop run. and error is showed in tui
-			messages.current = nextMessages;
 		} catch (error) {
 			if (controller.signal.aborted) {
 				addEntry("error", "Run aborted")
@@ -138,13 +171,23 @@ export default function App() {
 		openLogin: () => setLoginOpen(true),
 		newSession: () => {
 			if (running.current) return;
-			messages.current = [];
-			setEntries([]);
+			// creates new session
+			setSession(SessionStore.create(process.cwd(), "openrouter", currentModel))
+			setEntries([])
 		},
 		selectModel: (model: string) => {
-			if (!running.current) setCurrentModel(model);
+			if (running.current || session.getMessages().length > 0) { // if currently running then dont change model
+				return;
+			}
+			setCurrentModel(model);
+			// For this first version, provider/model fixed during a session. so chaning it would create a new session
+			setSession(
+				SessionStore.create(
+					process.cwd(),
+					"openrouter",
+					model,))
 		},
-	}), [exit]);
+	}), [exit, currentModel, session]);
 
 	async function handleLoginSubmit(apiKey: string) {
 		await saveApiKey(apiKey);
