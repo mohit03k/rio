@@ -37,6 +37,24 @@ export const InputPrompt = ({
 		allcommands(context)
 		, [context])
 
+	function moveCursorVertically(direction: -1 | 1) {
+		const lines = value.split("\n");
+		const beforeCursor = value.slice(0, cursor).split("\n");
+		const row = beforeCursor.length - 1;
+		const column = beforeCursor[row]!.length;
+		const targetRow = row + direction;
+
+		if (targetRow < 0 || targetRow >= lines.length) return;
+
+		let targetStart = 0;
+		for (let index = 0; index < targetRow; index++) {
+			targetStart += lines[index]!.length + 1; // Include the newline.
+		}
+
+		// A shorter line places the cursor at its end.
+		setCursor(targetStart + Math.min(column, lines[targetRow]!.length));
+	}
+
 	function onHandleSelect(item: Command) {
 		setCommandMenu(false) // close the commandmenu
 		setValue('')
@@ -78,6 +96,21 @@ export const InputPrompt = ({
 		}
 
 		if (submenu && (key.return || key.upArrow || key.downArrow)) return;
+
+		// to move vertically between lines using up/down
+		if (key.upArrow || key.downArrow) {
+			if (!commandmenu) moveCursorVertically(key.upArrow ? -1 : 1);
+			return;
+		}
+
+		// to enter newline with ctrl+j
+		if ((key.ctrl && input === "j") || input === "\n") {
+			setValue(
+				value.slice(0, cursor) + "\n" + value.slice(cursor),
+			);
+			setCursor(cursor + 1);
+			return;
+		}
 
 		if (key.return) {
 			// CommandMenu handles command selection itself.
@@ -145,7 +178,8 @@ export const InputPrompt = ({
 					<Text>
 						{PROMPT}
 						{value.slice(0, cursor)}
-						<Text inverse>{value[cursor] ?? " "}</Text>
+						<Text inverse>{value[cursor] === "\n" ? " " : value[cursor] ?? " "}</Text>
+						{value[cursor] === "\n" ? "\n" : ""}
 						{value.slice(cursor + 1)}
 					</Text>
 				) : (
