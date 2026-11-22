@@ -7,10 +7,7 @@ import type { ToolResult } from "ai/types/tool";
 
 export async function runLoop({
   model,
-  /**
-  * an already-running tool won’t stop immediately, because tool.execute() doesn’t receive the signal yet. 
-  * Cancellation will take effect after that tool finishes.
-  */
+  // Tools can use this signal to stop work already in progress.
   signal,
   tools, messages, system, maxTurns, provider, onEvent }: AgentOptions) {
   let iterations = 0;
@@ -57,7 +54,7 @@ export async function runLoop({
       try {
         const tool = tools.find((t) => t.name === block.name);
         if (!tool) throw new Error(`unkown tool name from LLM ${block.name}`)
-        res = await tool.execute(block.arguments);
+        res = await tool.execute(block.arguments, signal ? { signal } : {});
       } catch (e) { // some error occured while executing tool. this shouldnt run generally as we do return error in tool calling
         signal?.throwIfAborted();
 
@@ -66,7 +63,10 @@ export async function runLoop({
           isError: true
         }
       }
-      onEvent({ type: "tool_end", call: block, result: res.content, isError: res.isError })
+      onEvent({
+        type: "tool_end", call: block, result: res.content, isError: res.isError,
+        ...(res.isCancelled !== undefined ? { isCancelled: res.isCancelled } : {}),
+      })
       // after tool call push it to messages array
       push({
         role: "toolResult",
@@ -74,7 +74,10 @@ export async function runLoop({
         toolName: block.name,
         content: res.content,
         isError: res.isError,
+        ...(res.isCancelled !== undefined ? { isCancelled: res.isCancelled } : {}),
       });
+      // Save the tool's result before ending the cancelled run.
+      signal?.throwIfAborted();
     }
     // after pushing tools result to messages the loop will run again and based on response if its tools use or "done"
   }

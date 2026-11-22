@@ -24,7 +24,7 @@ export const readTool: Tool = {
     },
     required: ["path"]
   },
-  async execute(args) {
+  async execute(args, _context?: { signal?: AbortSignal }) {
     if (typeof args.path !== "string") {
       return {
         content: "Invalid argument: path must be strings.",

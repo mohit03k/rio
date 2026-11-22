@@ -37,7 +37,7 @@ function restoreMessage(messages: Message[]) {
 			entries.push({
 				id: crypto.randomUUID(), kind: "tool", text:
 					`${message.toolName}: ` +
-					`${message.isError ? "failed" : "done"}\n` +
+					`${message.isCancelled ? "cancelled" : message.isError ? "failed" : "done"}\n` +
 					message.content,
 			})
 		}
@@ -145,7 +145,7 @@ export default function App({ initialSession }: AppProps) {
 						// get the particular tool call that was in running phase. to update its entry with status
 						const id = toolEntries.get(event.call.id);
 						if (id !== undefined) {
-							const status = event.isError ? "failed" : "done";
+							const status = event.isCancelled ? "cancelled" : event.isError ? "failed" : "done";
 							updateEntry(id, `${event.call.name}: ${status}\n${event.result}`);
 						}
 					}

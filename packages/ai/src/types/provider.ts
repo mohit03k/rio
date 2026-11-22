@@ -27,6 +27,7 @@ export type ToolResultMessage = {
   toolName: string;
   content: string;   // what the LLM sees
   isError?: boolean;
+  isCancelled?: boolean;
 };
 
 export type StopReason = "length" | "stop" | "toolUse";

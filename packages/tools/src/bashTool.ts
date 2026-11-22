@@ -40,7 +40,10 @@ function findBash() {
 }
 
 
-function runBash(command: string, timeout: number): Promise<ToolResult> { // returns string
+function runBash(command: string, timeout: number, signal?: AbortSignal): Promise<ToolResult> {
+  if (signal?.aborted) {
+    return Promise.resolve({ content: "Command cancelled before starting.", isError: true, isCancelled: true });
+  }
   return new Promise((resolve) => {
     const child = spawn(findBash(), ["-c", command], {
       cwd: process.cwd(),
@@ -53,11 +56,12 @@ function runBash(command: string, timeout: number): Promise<ToolResult> { // ret
     let output = "";
     let settled = false;
 
-    function finish(content: string, isError: boolean) {
+    function finish(content: string, isError: boolean, isCancelled = false) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ content, isError });
+      signal?.removeEventListener("abort", onAbort);
+      resolve({ content, isError, isCancelled });
     }
 
     child.stdout.on("data", (data) => { // on any success command data
@@ -68,7 +72,9 @@ function runBash(command: string, timeout: number): Promise<ToolResult> { // ret
       output += data.toString();
     });
 
-    const timer = setTimeout(() => { // timeout to kill the child_process
+    // Both timeout and cancellation use the same process-tree cleanup.
+    function stopCommand(reason: string, isCancelled = false) {
+      if (settled) return;
       if (child.pid !== undefined) {// if the child process is failed to spawn the pid is undefined so we add a check
         try {
           if (process.platform === "win32") {
@@ -97,11 +103,20 @@ function runBash(command: string, timeout: number): Promise<ToolResult> { // ret
       child.stdout.destroy();
       child.stderr.destroy();
 
-      finish(
-        `${output}\nTimed out after ${timeout / 1000} seconds`,
-        true,
-      );
+      finish(`${output}\n${reason}`, true, isCancelled);
+    }
+
+    function onAbort() {
+      stopCommand("Command cancelled. Check any partial changes before retrying.", true);
+    }
+
+    const timer = setTimeout(() => {
+      stopCommand(`Timed out after ${timeout / 1000} seconds`);
     }, timeout);
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+    // Covers cancellation between the initial check and listener registration.
+    if (signal?.aborted) onAbort();
 
     child.on("error", (error) => {
       finish(`${output}\nFailed to start Bash: ${error.message}`, true);
@@ -138,7 +153,7 @@ export const bashTool: Tool = {
     required: ["command"]
   },
 
-  async execute(args) {
+  async execute(args, context) {
     // if windows then Git bash in windows cmd (this allows us to run UNIX style commands in windows cmd. like ls, pwd, cd, mkdir etc). 
     // then bash commands 
 
@@ -160,10 +175,10 @@ export const bashTool: Tool = {
         isError: true
       }
     };
-    const result = await runBash(args.command, timeout);
+    const result = await runBash(args.command, timeout, context?.signal);
     return {
-      content: truncateOutput(result.content),
-      isError: result.isError
+      ...result,
+      content: truncateOutput(result.content)
     }
   },
 }

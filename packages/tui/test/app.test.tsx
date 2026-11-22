@@ -1,9 +1,25 @@
 import { expect, mock, test } from "bun:test";
 import { render } from "ink";
 import { PassThrough } from "node:stream";
+import { mkdtempSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { SessionStore } from "core/session/SessionStore";
 import type { Message, Provider } from "ai/types/provider";
 
 const requests: Message[][] = [];
+let cancellationCommand: string | undefined;
+
+function temporarySession() {
+  const directory = mkdtempSync(join(tmpdir(), "rio-tui-test-"));
+  const filepath = join(directory, "session.jsonl");
+  writeFileSync(filepath, JSON.stringify({
+    type: "session", version: 1, id: crypto.randomUUID(),
+    cwd: process.cwd(), provider: "openrouter", model: "test-model",
+    createdAt: new Date().toISOString(),
+  }) + "\n");
+  return { directory, session: SessionStore.load(filepath) };
+}
 let finishStream: () => void;
 const streamGate = new Promise<void>(resolve => { finishStream = resolve; });
 
@@ -13,7 +29,25 @@ const provider: Provider = {
   async *stream({ messages }) {
     requests.push([...messages]);
     const usage = { input: 1, output: 1 };
-    if (requests.length === 1) {
+    if (cancellationCommand !== undefined) {
+      const lastUser = messages.filter(message => message.role === "user").at(-1);
+      if (lastUser?.content === "Run a long command") {
+        yield {
+          type: "done",
+          message: {
+            role: "assistant",
+            content: [{ type: "tool_call", id: "bash-1", name: "bash", arguments: { command: cancellationCommand } }],
+            usage, stopReason: "toolUse",
+          },
+        };
+      } else {
+        yield { type: "text_delta", delta: "Ready again." };
+        yield {
+          type: "done",
+          message: { role: "assistant", content: [{ type: "text", text: "Ready again." }], usage, stopReason: "stop" },
+        };
+      }
+    } else if (requests.length === 1) {
       yield { type: "text_delta", delta: "Looking" };
       await streamGate;
       yield { type: "text_delta", delta: " now" };
@@ -61,7 +95,8 @@ test("streams text, runs a tool, retains history, handles errors and clears chat
   const stdout = Object.assign(new PassThrough(), { columns: 100 });
   let lastFrame = "";
   stdout.on("data", chunk => { lastFrame = chunk.toString(); });
-  const ui = render(<App />, {
+  const fixture = temporarySession();
+  const ui = render(<App initialSession={fixture.session} />, {
     stdin: stdin as unknown as NodeJS.ReadStream,
     stdout: stdout as unknown as NodeJS.WriteStream,
     debug: true,
@@ -104,7 +139,7 @@ test("streams text, runs a tool, retains history, handles errors and clears chat
     // A failed run must still allow the user to submit again.
     await submit("Try again");
     await waitFor(() => requests.length === 4 && !frame().includes("Working..."));
-    expect(requests[3]?.some(message => message.role === "user" && message.content === "Follow up")).toBe(false);
+    expect(requests[3]?.some(message => message.role === "user" && message.content === "Follow up")).toBe(true);
 
     await Bun.sleep(60);
     stdin.write("/");
@@ -117,6 +152,71 @@ test("streams text, runs a tool, retains history, handles errors and clears chat
   } finally {
     ui.unmount();
     ui.cleanup();
+    rmSync(fixture.directory, { recursive: true, force: true });
+    if (savedKey === undefined) delete process.env.OPENROUTER_API;
+    else process.env.OPENROUTER_API = savedKey;
+  }
+});
+
+test.each([
+  ["Escape", "\u001b"],
+  ["Ctrl+C", "\u0003"],
+])("%s cancels a running Bash tool and accepts another prompt", async (_name, key) => {
+  const savedKey = process.env.OPENROUTER_API;
+  process.env.OPENROUTER_API = "test-key";
+  const fixture = temporarySession();
+  const readyFile = join(fixture.directory, "ready");
+  cancellationCommand = `echo started > '${readyFile}'; sleep 30 & wait`;
+  requests.length = 0;
+
+  const stdin = Object.assign(new PassThrough(), {
+    isTTY: true, setRawMode() {}, ref() {}, unref() {},
+  });
+  const stdout = Object.assign(new PassThrough(), { columns: 100 });
+  let frame = "";
+  stdout.on("data", chunk => { frame = chunk.toString(); });
+  const ui = render(<App initialSession={fixture.session} />, {
+    stdin: stdin as unknown as NodeJS.ReadStream,
+    stdout: stdout as unknown as NodeJS.WriteStream,
+    debug: true, exitOnCtrlC: false, patchConsole: false,
+  });
+
+  async function submit(text: string) {
+    await Bun.sleep(80);
+    stdin.write(text);
+    await waitFor(() => frame.includes(`> ${text}`));
+    await Bun.sleep(80);
+    stdin.write("\r");
+  }
+
+  try {
+    await submit("Run a long command");
+    await waitFor(() => existsSync(readyFile) && frame.includes("bash: running..."));
+    await Bun.sleep(80);
+    stdin.write(key);
+    await waitFor(() => frame.includes("bash: cancelled") && !frame.includes("Working..."));
+    expect(frame).toContain("Run aborted");
+    expect(requests).toHaveLength(1);
+
+    const savedMessages = SessionStore.load(fixture.session.filepath).getMessages();
+    expect(savedMessages.some(message =>
+      message.role === "toolResult" && message.isCancelled && message.isError,
+    )).toBe(true);
+
+    await submit("Continue chatting");
+    await waitFor(() => frame.includes("Ready again.") && !frame.includes("Working..."));
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.some(message =>
+      message.role === "toolResult" && message.isCancelled,
+    )).toBe(true);
+  } finally {
+    // If an assertion fails while running, still cancel the spawned command.
+    stdin.write("\u001b");
+    await Bun.sleep(80);
+    ui.unmount();
+    ui.cleanup();
+    cancellationCommand = undefined;
+    rmSync(fixture.directory, { recursive: true, force: true });
     if (savedKey === undefined) delete process.env.OPENROUTER_API;
     else process.env.OPENROUTER_API = savedKey;
   }

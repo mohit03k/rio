@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os"
-import path, { join } from "node:path"
+import { join } from "node:path"
 // function to get session path to load in the tui. if user decides to resume a session
 
 
