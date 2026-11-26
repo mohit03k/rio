@@ -4,6 +4,7 @@ import { CommandMenu } from './command/index.js';
 import { Submenu } from './SubMenu.js';
 import type { Command, SubMenuOption, CommandContext } from './command/types.js';
 import { allcommands } from './command/commands.js';
+import { FileMenu } from './FileMenu.js';
 
 const PROMPT = "> "
 
@@ -28,8 +29,19 @@ export const InputPrompt = ({
 	const [cursor, setCursor] = useState(0);
 	const [commandmenu, setCommandMenu] = useState(false);
 	const [submenu, setSubmenu] = useState<{ title: string, options: SubMenuOption[], onSelect: (value: string) => void } | null>(null);
+	const [fileStart, setFileStart] = useState<number | null>(null);
+
+	const fileQuery =
+		fileStart === null ? "" : value.slice(fileStart + 1, cursor);
+
+	const isFiles =
+		fileStart !== null &&
+		value[fileStart] === "@" &&
+		cursor > fileStart &&
+		!/\s/.test(fileQuery);
 
 	// so Input Prompt file mainly becomes things to wire up
+
 	// we pass all the context(functions) required by those commands to run
 
 
@@ -66,6 +78,20 @@ export const InputPrompt = ({
 			setSubmenu({ title: item.name, options: item.action.options, onSelect: item.action.onSelect })
 		}
 	}
+	function handleFileSelect(filepath: string) {
+		if (fileStart === null) return;
+
+		const reference = `@${filepath} `;
+
+		setValue(
+			value.slice(0, fileStart) +
+			reference +
+			value.slice(cursor),
+		);
+
+		setCursor(fileStart + reference.length);
+		setFileStart(null);
+	}
 
 	useInput((input, key) => {
 		const isCtrlC = key.ctrl && input === "c";
@@ -92,10 +118,17 @@ export const InputPrompt = ({
 		if (key.escape) {
 			if (commandmenu) setCommandMenu(false)
 			if (submenu) setSubmenu(null)
+			setFileStart(null);
 			return
 		}
 
 		if (submenu && (key.return || key.upArrow || key.downArrow)) return;
+		if (
+			isFiles &&
+			(key.return || key.upArrow || key.downArrow)
+		) {
+			return;
+		}
 
 		// to move vertically between lines using up/down
 		if (key.upArrow || key.downArrow) {
@@ -146,7 +179,7 @@ export const InputPrompt = ({
 			setValue(nextValue);
 			setCursor(cursor - 1);
 
-			if (commandmenu && nextValue === "") {
+			if ((commandmenu && nextValue === "")) {
 				setCommandMenu(false);
 			}
 
@@ -155,6 +188,9 @@ export const InputPrompt = ({
 		if (input && !key.ctrl && !key.meta) {
 			if (input === "/" && value === "" && !submenu) {
 				setCommandMenu(true);
+			}
+			if (input === "@" && !submenu && !commandmenu) {
+				setFileStart(cursor);
 			}
 
 			// finally set the value
@@ -198,6 +234,13 @@ export const InputPrompt = ({
 					onSelect={(v) => { submenu.onSelect(v.value); setSubmenu(null) }}
 					onCancel={() => { setSubmenu(null) }}
 					filterText={value}
+				/>
+			)}
+			{isFiles && (
+				<FileMenu
+					key={fileQuery}
+					query={fileQuery}
+					onSelect={handleFileSelect}
 				/>
 			)}
 			<Box paddingX={1}>
