@@ -41,7 +41,7 @@ function main() {
 		? SessionStore.load(filepath)
 		: SessionStore.create( // means first time running cli from this path
 			cwd,
-			"openrouter",
+			"groq",
 			"qwen/qwen3.8-27b",
 		);
 

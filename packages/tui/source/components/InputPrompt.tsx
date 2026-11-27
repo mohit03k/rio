@@ -40,11 +40,6 @@ export const InputPrompt = ({
 		cursor > fileStart &&
 		!/\s/.test(fileQuery);
 
-	// so Input Prompt file mainly becomes things to wire up
-
-	// we pass all the context(functions) required by those commands to run
-
-
 	const temp = useMemo(() => // gets all the commands
 		allcommands(context)
 		, [context])
@@ -78,11 +73,10 @@ export const InputPrompt = ({
 			setSubmenu({ title: item.name, options: item.action.options, onSelect: item.action.onSelect })
 		}
 	}
-	function handleFileSelect(filepath: string) {
+	async function handleFileSelect(filepath: string) {
 		if (fileStart === null) return;
 
-		const reference = `@${filepath} `;
-
+		const reference = `@${filepath} `
 		setValue(
 			value.slice(0, fileStart) +
 			reference +
@@ -102,7 +96,6 @@ export const InputPrompt = ({
 			}
 			return;
 		}
-
 
 		if (key.ctrl && input === 'c') {
 			if (commandmenu) {
@@ -238,7 +231,6 @@ export const InputPrompt = ({
 			)}
 			{isFiles && (
 				<FileMenu
-					key={fileQuery}
 					query={fileQuery}
 					onSelect={handleFileSelect}
 				/>

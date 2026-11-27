@@ -10,6 +10,7 @@ import { InputHistory } from "./components/InputHistory.js";
 import { LoginPrompt } from "./components/LoginPrompt.js";
 import { loadApiKey, saveApiKey } from "./components/utils/auth.js";
 import { SessionStore } from "core/session/SessionStore";
+import { attachReferences } from "./components/utils/filemenu.js";
 
 const TOOLS = [readTool, writeTool, editTool, bashTool, grepTool, findTool, lsTool];
 
@@ -95,7 +96,17 @@ export default function App({ initialSession }: AppProps) {
 
 		try {
 			session.repairInterruptedTools()
-			session.appendMessage({ role: "user", content: prompt })
+
+			// on every user input submit. if any @src/ then attach those at prompt end
+			const content = await attachReferences(
+				text,
+				controller.signal,
+			);
+
+			session.appendMessage({
+				role: "user",
+				content,
+			});
 			const nextMessages = session.getMessages();
 
 			// if not api key in .env. load from homedir .rio/auth.json and set in .env
